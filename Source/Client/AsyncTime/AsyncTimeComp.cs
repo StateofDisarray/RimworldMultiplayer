@@ -94,13 +94,10 @@ namespace Multiplayer.Client
             tickingMap = map;
             PreContext();
 
-            //SimpleProfiler.Start();
-
             try
             {
                 map.MapPreTick();
                 mapTicks++;
-                Find.TickManager.ticksGameInt = mapTicks;
 
                 tickListNormal.Tick();
                 tickListRare.Tick();
@@ -108,8 +105,9 @@ namespace Multiplayer.Client
 
                 TickMapSessions();
 
-                storyteller.StorytellerTick();
-                storyWatcher.StoryWatcherTick();
+                // The storyteller is now only ticked at the world level, not per-map.
+                // storyteller.StorytellerTick(); // DELETED
+                // storyWatcher.StoryWatcherTick(); // DELETED
 
                 QuestManagerTickAsyncTime();
 
@@ -127,8 +125,6 @@ namespace Multiplayer.Client
                 Multiplayer.game.sync.TryAddMapRandomState(map.uniqueID, randState);
                 eventCount++;
                 tickingMap = null;
-
-                //SimpleProfiler.Pause();
             }
         }
 
@@ -164,30 +160,29 @@ namespace Multiplayer.Client
                     force: true);
             }
 
-            prevTime = TimeSnapshot.GetAndSetFromMap(map);
+            // Set our global tick override to this map's specific tick count.
+            TickManager_Patch_State.TicksGame_Agnostic = this.mapTicks;
 
+            // Set the map's local storyteller as the current one
             prevStoryteller = Current.Game.storyteller;
             prevStoryWatcher = Current.Game.storyWatcher;
-
             Current.Game.storyteller = storyteller;
             Current.Game.storyWatcher = storyWatcher;
 
-            Rand.PushState();
-            Rand.StateCompressed = randState;
-
-            // Reset the effects of SkyManager.SkyManagerUpdate
-            map.skyManager.curSkyGlowInt = map.skyManager.CurrentSkyTarget().glow;
+            // We no longer manipulate the RNG stack here.
+            // The individual patches in Patches.cs will handle it.
         }
 
         public void PostContext()
         {
+            // Restore the real storyteller
             Current.Game.storyteller = prevStoryteller;
             Current.Game.storyWatcher = prevStoryWatcher;
 
-            prevTime?.Set();
+            // IMPORTANT: Clear the global tick override
+            TickManager_Patch_State.TicksGame_Agnostic = null;
 
-            randState = Rand.StateCompressed;
-            Rand.PopState();
+            // We no longer manipulate the RNG stack here.
 
             if (Multiplayer.GameComp.multifaction)
                 map.PopFaction();
